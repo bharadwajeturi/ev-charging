@@ -7,10 +7,9 @@ export function UIThemeProvider({ children }) {
   const [intervalKm, setIntervalKm] = useState(100);
 
   const themeColor =
-  intervalKm <= 100 ? "green" :
-  intervalKm <= 200 ? "yellow" :
-  "red";
-
+    intervalKm <= 100 ? "green" :
+    intervalKm <= 200 ? "yellow" :
+    "red";
 
   return (
     <UIThemeContext.Provider
@@ -29,6 +28,8 @@ export function UIThemeProvider({ children }) {
 
 export function useUITheme() {
   const ctx = useContext(UIThemeContext);
-  if (!ctx) throw new Error("useUITheme must be used inside UIThemeProvider");
+  if (!ctx) {
+    throw new Error("useUITheme must be used inside UIThemeProvider");
+  }
   return ctx;
 }

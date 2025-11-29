@@ -4,12 +4,12 @@ export async function fetchStationsNearPoint(lat, lng) {
   const res = await fetch(`${BACKEND_URL}/api/ev-stations/search`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       latitude: lat,
-      longitude: lng
-    })
+      longitude: lng,
+    }),
   });
 
   if (!res.ok) {
@@ -17,5 +17,8 @@ export async function fetchStationsNearPoint(lat, lng) {
   }
 
   const data = await res.json();
+  console.log("EV API response:", data);
+
+  // ✅ IMPORTANT: backend sends { stations: [...] }
   return data.stations || [];
 }

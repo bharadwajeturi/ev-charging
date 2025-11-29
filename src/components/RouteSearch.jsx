@@ -1,43 +1,48 @@
 import { Autocomplete } from "@react-google-maps/api";
-import { useRef } from "react";
+import { useState } from "react";
 
 export default function RouteSearch({ onSearch }) {
-  const originRef = useRef();
-  const destinationRef = useRef();
+  const [originAC, setOriginAC] = useState(null);
+  const [destAC, setDestAC] = useState(null);
 
-  const handleSearch = () => {
-    if (!originRef.current.value || !destinationRef.current.value)
+  const handlePlan = () => {
+    if (!originAC || !destAC) {
+      alert("Please select locations from suggestions.");
       return;
+    }
 
-    onSearch(
-      originRef.current.value,
-      destinationRef.current.value
-    );
+    const origin = originAC.getPlace()?.formatted_address;
+    const destination = destAC.getPlace()?.formatted_address;
+
+    if (!origin || !destination) {
+      alert("Invalid locations selected.");
+      return;
+    }
+
+    onSearch({ origin, destination });
   };
 
   return (
-    <div className="bg-white p-4 rounded shadow mb-3">
-      <Autocomplete>
+    <div className="flex flex-col gap-3 p-3 bg-white rounded shadow">
+      <Autocomplete onLoad={setOriginAC}>
         <input
-          ref={originRef}
-          placeholder="Current location"
-          className="w-full border p-2 mb-2 rounded"
+          placeholder="Start location"
+          className="p-2 border rounded w-full"
         />
       </Autocomplete>
 
-      <Autocomplete>
+      <Autocomplete onLoad={setDestAC}>
         <input
-          ref={destinationRef}
           placeholder="Destination"
-          className="w-full border p-2 mb-2 rounded"
+          className="p-2 border rounded w-full"
         />
       </Autocomplete>
 
       <button
-        onClick={handleSearch}
-        className="w-full bg-green-600 text-white py-2 rounded"
+        onClick={handlePlan}
+        className="bg-black text-white py-2 rounded"
       >
-        Find Charging Stations
+        ⚡ Plan Route
       </button>
     </div>
   );
