@@ -1,34 +1,38 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+
 import MapView from "../components/MapView";
 import StationCard from "../components/StationCard";
+import MapPanel from "../ui/MapPanel";
+
 import { fetchStationsNearPoint } from "../services/evStationsApi";
 import { extractRoutePoints } from "../utils/routeUtils";
 import { segmentRoute } from "../utils/segmentRoute";
-import MapPanel from "../ui/MapPanel";
-
 
 export default function RoutePlanner() {
-  const [directions, setDirections] = useState(null);
   const navigate = useNavigate();
   const { state } = useLocation();
 
-  // ✅ SAFETY GUARD
+  /* ✅ SAFETY GUARD */
   if (!state) {
-    return <p>Invalid navigation</p>;
+    return <p className="p-4">Invalid navigation</p>;
   }
 
   const { origin, destination, intervalKm, preferredBrand } = state;
 
+  /* ✅ LOCAL STATE (FIXED) */
+  const [directions, setDirections] = useState(null);
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [routePoints, setRoutePoints] = useState([]);
 
   console.log("RoutePlanner state:", state);
 
-  /* ---------------- LOAD ROUTE + POINTS ---------------- */
+  /* ---------------- LOAD ROUTE + STATIONS ---------------- */
   useEffect(() => {
     const service = new window.google.maps.DirectionsService();
+
+    setLoading(true);
+    setStations([]);
 
     service.route(
       {
@@ -36,28 +40,30 @@ export default function RoutePlanner() {
         destination,
         travelMode: window.google.maps.TravelMode.DRIVING,
       },
-      async (res, status) => {
-        if (status !== "OK") return;
+      async (result, status) => {
+        if (status !== "OK") {
+          setLoading(false);
+          return;
+        }
 
-        const points = extractRoutePoints(res);
-        setRoutePoints(points);
-        setDirections(res);
+        setDirections(result);
 
-        // ✅ pick first interval point
+        const points = extractRoutePoints(result);
         const segmentPoints = segmentRoute(points, intervalKm);
 
-        if (segmentPoints.length > 0) {
-          const p = segmentPoints[0];
+        const collected = [];
+
+        for (const p of segmentPoints) {
           try {
             const list = await fetchStationsNearPoint(p.lat, p.lng);
-            setStations(list);
+            collected.push(...list.slice(0, 2));
           } catch (err) {
-            console.error(err);
-            setStations([]);
-          } finally {
-            setLoading(false);
+            console.error("Station fetch failed", err);
           }
         }
+
+        setStations(collected);
+        setLoading(false);
       }
     );
   }, [origin, destination, intervalKm]);
@@ -87,6 +93,12 @@ export default function RoutePlanner() {
           </p>
         )}
 
+        {!loading && stations.length === 0 && (
+          <p className="text-xs text-gray-500 mt-4">
+            No charging stations found.
+          </p>
+        )}
+
         {stations.map((s) => (
           <StationCard key={s.id} station={s} />
         ))}
@@ -94,7 +106,7 @@ export default function RoutePlanner() {
 
       {/* MAP PANEL */}
       <MapPanel>
-        <MapView   directions={directions} stations={stations} />
+        <MapView directions={directions} stations={stations} />
       </MapPanel>
     </div>
   );

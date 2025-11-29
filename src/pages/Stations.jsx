@@ -1,135 +1,120 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+
 import RouteSearch from "../components/RouteSearch";
 import MapView from "../components/MapView";
 import StationCard from "../components/StationCard";
 
-/**
- * BRAND CONFIG
- * Later this can come from backend / DB
- */
+import { extractRoutePoints } from "../utils/routeUtils";
+import { segmentRoute } from "../utils/segmentRoute";
+import { fetchStationsNearPoint } from "../services/evStationsApi";
+
+/* ---------------- CONSTANTS ---------------- */
+
 const BRANDS = [
-  {
-    id: "any",
-    name: "Any Brand",
-    logo: "/assets/brands/any.png", // optional for now
-  },
-  {
-    id: "tata",
-    name: "Tata",
-    logo: "/assets/brands/tata.png",
-  },
-  {
-    id: "mg",
-    name: "MG",
-    logo: "/assets/brands/mg.png",
-  },
-  {
-    id: "mahindra",
-    name: "Mahindra",
-    logo: "/assets/brands/mahindra.png",
-  },
+  { id: "any", name: "Any Brand" },
+  { id: "tata", name: "Tata" },
+  { id: "mg", name: "MG" },
+  { id: "mahindra", name: "Mahindra" },
 ];
 
-/**
- * KM OPTIONS
- */
 const KM_OPTIONS = [50, 100, 150, 200];
+
+/* ---------------- COMPONENT ---------------- */
 
 export default function Stations() {
   const navigate = useNavigate();
 
-  // ✅ FILTER STATE
+  /* ✅ FILTER STATE */
   const [selectedBrand, setSelectedBrand] = useState("any");
-  const [intervalKm, setIntervalKm] = useState(50); // ✅ default 50
-  const [stations] = useState([]);
-  
+  const [intervalKm, setIntervalKm] = useState(50);
 
-  /**
-   * Called when user clicks "Plan Route"
-   */
+  /* ✅ ROUTE + DATA STATE */
+  const [routeInputs, setRouteInputs] = useState(null);
+  const [directions, setDirections] = useState(null);
+  const [stations, setStations] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  /* ---------------- SEARCH HANDLER ---------------- */
   const handleSearch = ({ origin, destination }) => {
-    if (!origin || !destination) {
-      alert("Please select origin & destination");
-      return;
-    }
-
-    navigate("/route-planner", {
-      state: {
-        origin,
-        destination,
-        intervalKm,
-        preferredBrand: selectedBrand,
-      },
+    setRouteInputs({
+      origin,
+      destination,
+      intervalKm,
+      preferredBrand: selectedBrand,
     });
   };
 
+  /* ---------------- ROUTE + STATION LOGIC ---------------- */
+  useEffect(() => {
+    if (!routeInputs) return;
+
+    const { origin, destination, intervalKm } = routeInputs;
+
+    setLoading(true);
+    setStations([]);
+
+    const service = new window.google.maps.DirectionsService();
+
+    service.route(
+      {
+        origin,
+        destination,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+      },
+      async (result, status) => {
+        if (status !== "OK") {
+          setLoading(false);
+          alert("Invalid route");
+          return;
+        }
+
+        setDirections(result);
+
+        const points = extractRoutePoints(result);
+        const segments = segmentRoute(points, intervalKm);
+
+        const collected = [];
+
+        for (const p of segments) {
+          const nearby = await fetchStationsNearPoint(p.lat, p.lng);
+          collected.push(...nearby.slice(0, 2));
+        }
+
+        setStations(collected);
+        setLoading(false);
+      }
+    );
+  }, [routeInputs]);
+
+  /* ---------------- UI ---------------- */
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* ✅ NAVBAR (TEMP COLOR) */}
-      <div
-        style={{
-          height: "56px",
-          backgroundColor: "#111827",
-          color: "#fff",
-          display: "flex",
-          alignItems: "center",
-          padding: "0 16px",
-          fontWeight: 600,
-        }}
-      >
+    <div className="min-h-screen flex flex-col">
+      {/* NAVBAR */}
+      <div className="h-14 bg-gray-900 text-white flex items-center px-4 font-semibold">
         EV Charge Hub
       </div>
 
-      {/* ✅ FILTERS + SEARCH */}
-      <div
-        style={{
-          padding: "12px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "12px",
-        }}
-      >
-        {/* ✅ BRAND + KM ROW */}
-        <div
-          style={{
-            display: "flex",
-            gap: "8px",
-            flexWrap: "wrap",
-          }}
-        >
-          {/* BRAND DROPDOWN */}
+      {/* FILTERS */}
+      <div className="p-3 flex flex-col gap-3">
+        <div className="flex gap-2 flex-wrap">
           <select
             value={selectedBrand}
             onChange={(e) => setSelectedBrand(e.target.value)}
-            style={{
-              flex: 1,
-              minWidth: "140px",
-              padding: "8px",
-            }}
+            className="flex-1 p-2"
           >
-            {BRANDS.map((brand) => (
-              <option key={brand.id} value={brand.id}>
-                {brand.name}
+            {BRANDS.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
               </option>
             ))}
           </select>
 
-          {/* KM DROPDOWN */}
           <select
             value={intervalKm}
             onChange={(e) => setIntervalKm(Number(e.target.value))}
-            style={{
-              flex: 1,
-              minWidth: "140px",
-              padding: "8px",
-            }}
+            className="flex-1 p-2"
           >
             {KM_OPTIONS.map((km) => (
               <option key={km} value={km}>
@@ -139,29 +124,42 @@ export default function Stations() {
           </select>
         </div>
 
-        {/* ✅ ROUTE SEARCH */}
         <RouteSearch onSearch={handleSearch} />
 
-        {/* ✅ EMPTY STATE */}
-        {stations.length === 0 && (
-          <p style={{ fontSize: 13, color: "#666" }}>
+        {!stations.length && !loading && (
+          <p className="text-sm text-gray-500">
             Enter a route to see charging recommendations 🚀
           </p>
         )}
       </div>
 
-      {/* ✅ CONTENT AREA (MAP/LIST comes later) */}
-      <div style={{ flex: 1 }}>
-        <MapView stations={stations} />
+      {/* MAP + RESULTS */}
+      <div className="flex-1 relative">
+        <MapView directions={directions} stations={stations} />
+
+        {loading && <p className="p-3">Finding charging stations…</p>}
+
+        {stations.map((s) => (
+          <StationCard key={s.id} station={s} />
+        ))}
       </div>
 
-      {/* ✅ FOOTER (TEMP COLOR) */}
-      <div
-        style={{
-          height: "44px",
-          backgroundColor: "#111827",
-        }}
-      />
+      {/* VIEW FULL ROUTE */}
+      {routeInputs && (
+        <button
+          className="m-3 p-2 bg-black text-white rounded"
+          onClick={() =>
+            navigate("/route-planner", {
+              state: routeInputs,
+            })
+          }
+        >
+          View Full Route →
+        </button>
+      )}
+
+      {/* FOOTER */}
+      <div className="h-11 bg-gray-900" />
     </div>
   );
 }
