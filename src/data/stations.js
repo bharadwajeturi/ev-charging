@@ -1,0 +1,26 @@
+const stations = [{  id: 1,    name: "Tata EV Power Station",    
+                    location: "Hyderabad",    
+                    chargers: 4,    
+                    status: "Open 24/7",  
+                    lat:17.3850,
+                    lng:78.4867,
+                },  
+                {    
+                    id: 2,   
+                     name: "Ather Grid",   
+                     location: "Bangalore",    
+                     chargers: 6,    
+                     status: "Fast Charging",  
+                     lat:17.3850,
+                    lng:78.4867,
+                },  
+                {    
+                    id: 3,    
+                    name: "ChargeZone",    
+                    location: "Delhi",    
+                    chargers: 3,    
+                    status: "Open", 
+                    lat:15.3850,
+                    lng:58.4867, 
+                },];
+export default stations;

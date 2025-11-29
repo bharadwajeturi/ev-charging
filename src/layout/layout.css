@@ -1,0 +1,29 @@
+.split-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  height: calc(100vh - 64px); /* navbar height */
+}
+
+.left-panel {
+  overflow-y: auto;
+  border-right: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.right-panel {
+  position: relative;
+}
+
+/* ✅ Mobile fallback */
+@media (max-width: 768px) {
+  .split-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .left-panel {
+    max-height: 45vh;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+}
