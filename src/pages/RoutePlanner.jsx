@@ -68,7 +68,7 @@ export default function RoutePlanner() {
         </button>
 
         {stations.map((s) => (
-          <StationCard key={s._key} station={s} />
+          <StationCard key={s._key || `${s.id}-${s.stopIndex}` } station={s} />
         ))}
       </div>
 
