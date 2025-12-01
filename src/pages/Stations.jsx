@@ -1,59 +1,70 @@
+// src/pages/Stations.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import RouteSearch from "../components/RouteSearch";
 import MapView from "../components/MapView";
 import StationCard from "../components/StationCard";
-
-import { extractRoutePoints } from "../utils/routeUtils";
-import { segmentRoute } from "../utils/segmentRoute";
 import { fetchStationsNearPoint } from "../services/evStationsApi";
 
-/* ---------------- CONSTANTS ---------------- */
+/* ---------------- HELPERS ---------------- */
 
-const BRANDS = [
-  { id: "any", name: "Any Brand" },
-  { id: "tata", name: "Tata" },
-  { id: "mg", name: "MG" },
-  { id: "mahindra", name: "Mahindra" },
-];
+// Sort so selected brand appears first, then verified, then others
+function sortStationsHomePage(stations, selectedBrand) {
+  const sorted = [...stations];
 
-const KM_OPTIONS = [50, 100, 150, 200];
+  return sorted.sort((a, b) => {
+    // 1. Selected brand first
+    const aMatch =
+      selectedBrand !== "any" &&
+      a.brand?.toLowerCase() === selectedBrand.toLowerCase();
+    const bMatch =
+      selectedBrand !== "any" &&
+      b.brand?.toLowerCase() === selectedBrand.toLowerCase();
 
-/* ---------------- COMPONENT ---------------- */
+    if (aMatch && !bMatch) return -1;
+    if (!aMatch && bMatch) return 1;
+
+    // 2. Verified next
+    if (a.verified && !b.verified) return -1;
+    if (!a.verified && b.verified) return 1;
+
+    return 0;
+  });
+}
+
+/* ---------------- PAGE ---------------- */
 
 export default function Stations() {
   const navigate = useNavigate();
 
-  /* ✅ FILTER STATE */
   const [selectedBrand, setSelectedBrand] = useState("any");
-  const [intervalKm, setIntervalKm] = useState(50);
-
-  /* ✅ ROUTE + DATA STATE */
-  const [routeInputs, setRouteInputs] = useState(null);
-  const [directions, setDirections] = useState(null);
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  /* ---------------- SEARCH HANDLER ---------------- */
-  const handleSearch = ({ origin, destination }) => {
+  const [routeInputs, setRouteInputs] = useState(null);
+  const [directions, setDirections] = useState(null);
+
+  // Fixed: Always fetch ALL stations once user enters route
+  const handleSearch = ({ origin, destination, vehicleRangeKm, startBatteryPct }) => {
     setRouteInputs({
       origin,
       destination,
-      intervalKm,
+      vehicleRangeKm,
+      startBatteryPct,
       preferredBrand: selectedBrand,
     });
   };
 
-  /* ---------------- ROUTE + STATION LOGIC ---------------- */
+  /* ---------------- LOAD ALL STATIONS FOR HOME PAGE ---------------- */
   useEffect(() => {
     if (!routeInputs) return;
 
-    const { origin, destination, intervalKm } = routeInputs;
+    const { origin, destination, preferredBrand } = routeInputs;
 
     setLoading(true);
-    setStations([]);
 
+    // Get point near origin
     const service = new window.google.maps.DirectionsService();
 
     service.route(
@@ -64,71 +75,65 @@ export default function Stations() {
       },
       async (result, status) => {
         if (status !== "OK") {
+          console.error("Directions failed", status);
           setLoading(false);
-          alert("Invalid route");
           return;
         }
 
         setDirections(result);
 
-        const points = extractRoutePoints(result);
-        const segments = segmentRoute(points, intervalKm);
+        const firstStep = result.routes[0].legs[0].steps[0];
+        const lat = firstStep.end_location.lat();
+        const lng = firstStep.end_location.lng();
 
-        const collected = [];
+        try {
+          // Fetch all stations around origin
+          const all = await fetchStationsNearPoint(lat, lng);
 
-        for (const p of segments) {
-          const nearby = await fetchStationsNearPoint(p.lat, p.lng);
-          collected.push(...nearby.slice(0, 2));
+          // Sort by brand + verified
+          const ordered = sortStationsHomePage(all, selectedBrand);
+          setStations(ordered);
+        } catch (err) {
+          console.error("Station fetch failed", err);
+          setStations([]);
         }
 
-        setStations(collected);
         setLoading(false);
       }
     );
-  }, [routeInputs]);
+  }, [routeInputs, selectedBrand]);
 
   /* ---------------- UI ---------------- */
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* NAVBAR */}
+      {/* HEADER */}
       <div className="h-14 bg-gray-900 text-white flex items-center px-4 font-semibold">
         EV Charge Hub
       </div>
 
-      {/* FILTERS */}
+      {/* FILTERS + ROUTE INPUT */}
       <div className="p-3 flex flex-col gap-3">
-        <div className="flex gap-2 flex-wrap">
-          <select
-            value={selectedBrand}
-            onChange={(e) => setSelectedBrand(e.target.value)}
-            className="flex-1 p-2"
-          >
-            {BRANDS.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
 
-          <select
-            value={intervalKm}
-            onChange={(e) => setIntervalKm(Number(e.target.value))}
-            className="flex-1 p-2"
-          >
-            {KM_OPTIONS.map((km) => (
-              <option key={km} value={km}>
-                Every {km} km
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Brand filter */}
+        <select
+          value={selectedBrand}
+          onChange={(e) => setSelectedBrand(e.target.value)}
+          className="p-2 border rounded"
+        >
+          <option value="any">Any Brand</option>
+          <option value="tata">Tata</option>
+          <option value="mg">MG</option>
+          <option value="mahindra">Mahindra</option>
+          <option value="ather">Ather</option>
+          <option value="bpcl">BPCL</option>
+        </select>
 
         <RouteSearch onSearch={handleSearch} />
 
         {!stations.length && !loading && (
           <p className="text-sm text-gray-500">
-            Enter a route to see charging recommendations 🚀
+            Enter route to see all charging stations…
           </p>
         )}
       </div>
@@ -137,14 +142,17 @@ export default function Stations() {
       <div className="flex-1 relative">
         <MapView directions={directions} stations={stations} />
 
-        {loading && <p className="p-3">Finding charging stations…</p>}
+        {loading && <p className="p-3">Loading stations…</p>}
 
-        {stations.map((s) => (
-          <StationCard key={s.id} station={s} />
-        ))}
+        {/* Station list */}
+        <div className="absolute bottom-0 left-0 right-0 max-h-[45%] overflow-y-auto bg-white shadow-lg rounded-t-lg p-3">
+          {stations.map((s, idx) => (
+            <StationCard key={`${s.id}-${idx}`} station={s} />
+          ))}
+        </div>
       </div>
 
-      {/* VIEW FULL ROUTE */}
+      {/* VIEW FULL ROUTE BUTTON */}
       {routeInputs && (
         <button
           className="m-3 p-2 bg-black text-white rounded"
@@ -154,7 +162,7 @@ export default function Stations() {
             })
           }
         >
-          View Full Route →
+          View Detailed Route →
         </button>
       )}
 
